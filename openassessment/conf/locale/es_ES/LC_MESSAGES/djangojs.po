@@ -557,3 +557,12 @@ msgstr "Esta tarea de respuesta abierta ya ha sido publicada. Los cambios solo a
 #: xblock/static/js/src/studio/oa_edit.js:318
 msgid "error count: "
 msgstr "recuento de errores:"
+
+
+#: xblock/static/dist/openassessment-lms.018c55279d5e3b52e8ea.js:375
+msgid "Search learner"
+msgstr "Buscar estudiante"
+
+#: xblock/static/dist/openassessment-lms.018c55279d5e3b52e8ea.js:375
+msgid "You must select one row"
+msgstr "Debes seleccionar una fila"

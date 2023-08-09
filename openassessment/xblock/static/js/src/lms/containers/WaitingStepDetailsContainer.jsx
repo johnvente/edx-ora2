@@ -7,12 +7,14 @@ import {
 import { fetchWaitingStepDetails } from '../api/waiting_step_details';
 import WaitingStepContent from '../components/WaitingStepContent';
 
-const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount }) => {
+const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLearners }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [waitingStepDetails, setWaitingStepDetails] = useState({
     display_name: '', must_be_graded_by: '', must_grade: '', student_data: [],
   });
+
+  console.log('selectableUsers', selectableLearners);
 
   const updateData = async () => {
     // Clear error and display loading component
@@ -20,17 +22,49 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount }) => {
     setError(false);
 
     // Make request using API
-    const { success, waitingStepData } = await fetchWaitingStepDetails(waitingStepDataUrl);
+    try {
+      // Make request using API
+      const { success, waitingStepData } = await fetchWaitingStepDetails(waitingStepDataUrl);
 
-    // Check response and save contents on state
-    if (success) {
-      setWaitingStepDetails(waitingStepData);
-    } else {
+      // Check response and save contents on state
+      if (success) {
+        setWaitingStepDetails(waitingStepData);
+      } else {
+        setError(true);
+      }
+    } catch (error) {
       setError(true);
+    } finally {
+      setLoading(false);
+    
     }
-    setLoading(false);
   };
 
+  const getUserNamSelected = (username) => {
+    const button = document.querySelector(".button-staff-tools");
+    if (button) {
+      if (
+        !button.classList.contains("is--active") &&
+        button.getAttribute("aria-expanded") === "false"
+      ) {
+        button.click();
+      }
+
+      const inputUsername = document.querySelector(
+        ".openassessment__student_username.value"
+      );
+      const submitButtonUsername = document.querySelector(
+        ".action--submit-username"
+      );
+
+      if (inputUsername && submitButtonUsername) {
+        inputUsername.value = username;
+        submitButtonUsername.click();
+      }
+    }
+  };
+
+ 
   useEffect(() => {
     // Callback onMount
     onMount();
@@ -59,6 +93,8 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount }) => {
             <WaitingStepContent
               waitingStepDetails={waitingStepDetails}
               refreshData={updateData}
+              findUsername={getUserNamSelected}
+              selectableLearners={selectableLearners}
             />
           )}
 
@@ -82,6 +118,7 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount }) => {
 WaitingStepDetailsContainer.propTypes = {
   waitingStepDataUrl: PropTypes.string.isRequired,
   onMount: PropTypes.func,
+  selectableLearners: PropTypes.bool,
 };
 
 WaitingStepDetailsContainer.defaultProps = {
