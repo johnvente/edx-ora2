@@ -6,7 +6,6 @@ import { Search } from '@edx/paragon/icons';
 
 const getReadableTime = (timestamp) => moment(timestamp).fromNow(true);
 
-
 const currentDate = new Date();
 
 // Calculate the date seven days ago
@@ -22,10 +21,11 @@ const myObject = {
   workflow_status: '',
 };
 
-
-const WaitingStepList = ({ studentList, refreshData, findUsername, selectableLearners }) => {
-  console.log('Waiting Step List: selectableLearners', selectableLearners)
-  const studentListWithTimeAgo = [myObject].map((item) => ({
+const WaitingStepList = ({
+  studentList, refreshData, findUsername, selectableLearners,
+}) => {
+  const finalList = studentList.length ? studentList : [myObject];
+  const studentListWithTimeAgo = finalList.map((item) => ({
     ...item,
     created_at: getReadableTime(item.created_at),
   }));
@@ -35,8 +35,8 @@ const WaitingStepList = ({ studentList, refreshData, findUsername, selectableLea
   );
 
   const FindLearnerAction = (props) => {
-    const {tableInstance: { selectedFlatRows = [] } } = props;
-   
+    const { tableInstance: { selectedFlatRows = [] } } = props || { tableInstance: {} };
+
     const selectedFlatRowsLength = selectedFlatRows.length;
 
     if (selectableLearners && selectedFlatRowsLength) {
@@ -48,14 +48,16 @@ const WaitingStepList = ({ studentList, refreshData, findUsername, selectableLea
       const invalidSelection = selectedFlatRowsLength !== 1;
 
       const handleFindLearnerClick = () => {
-        findUsername?.(username);
+        if (findUsername) {
+          findUsername(username);
+        }
       };
 
       return (
         <>
           {invalidSelection && (
             <Form.Control.Feedback type="invalid" className="my-2">
-              {gettext("You must select one row")}
+              {gettext('You must select one row')}
             </Form.Control.Feedback>
           )}
           <Button
@@ -65,7 +67,7 @@ const WaitingStepList = ({ studentList, refreshData, findUsername, selectableLea
             disabled={invalidSelection}
             onClick={handleFindLearnerClick}
           >
-            {gettext("Search learner")}
+            {gettext('Search learner')}
           </Button>
         </>
       );
@@ -108,7 +110,7 @@ const WaitingStepList = ({ studentList, refreshData, findUsername, selectableLea
       ]}
       tableActions={[
         <RefreshAction />,
-        <FindLearnerAction />
+        <FindLearnerAction />,
       ]}
     >
       <DataTable.TableControlBar />
@@ -128,6 +130,7 @@ WaitingStepList.propTypes = {
 WaitingStepList.defaultProps = {
   refreshData: () => ({}),
   findUsername: undefined,
+  selectableLearners: false,
 };
 
 export default WaitingStepList;

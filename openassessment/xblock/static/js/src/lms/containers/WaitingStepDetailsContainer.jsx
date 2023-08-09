@@ -14,8 +14,6 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLe
     display_name: '', must_be_graded_by: '', must_grade: '', student_data: [],
   });
 
-  console.log('selectableUsers', selectableLearners);
-
   const updateData = async () => {
     // Clear error and display loading component
     setLoading(true);
@@ -32,29 +30,28 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLe
       } else {
         setError(true);
       }
-    } catch (error) {
+    } catch (err) {
       setError(true);
     } finally {
       setLoading(false);
-    
     }
   };
 
   const getUserNamSelected = (username) => {
-    const button = document.querySelector(".button-staff-tools");
+    const button = document.querySelector('.button-staff-tools');
     if (button) {
       if (
-        !button.classList.contains("is--active") &&
-        button.getAttribute("aria-expanded") === "false"
+        !button.classList.contains('is--active')
+        && button.getAttribute('aria-expanded') === 'false'
       ) {
         button.click();
       }
 
       const inputUsername = document.querySelector(
-        ".openassessment__student_username.value"
+        '.openassessment__student_username.value',
       );
       const submitButtonUsername = document.querySelector(
-        ".action--submit-username"
+        '.action--submit-username',
       );
 
       if (inputUsername && submitButtonUsername) {
@@ -64,7 +61,6 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLe
     }
   };
 
- 
   useEffect(() => {
     // Callback onMount
     onMount();
@@ -123,6 +119,7 @@ WaitingStepDetailsContainer.propTypes = {
 
 WaitingStepDetailsContainer.defaultProps = {
   onMount: () => ({}),
+  selectableLearners: false,
 };
 
 export default WaitingStepDetailsContainer;

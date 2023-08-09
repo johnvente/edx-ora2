@@ -3,7 +3,9 @@ import PropTypes from 'prop-types';
 import { Alert } from '@edx/paragon';
 import WaitingStepList from './WaitingStepList';
 
-const WaitingStepContent = ({ waitingStepDetails, refreshData, findUsername, selectableLearners }) => {
+const WaitingStepContent = ({
+  waitingStepDetails, refreshData, findUsername, selectableLearners,
+}) => {
   const oraDescriptionText = gettext(
     'The "{name}" problem is configured to require a minimum of {min_grades} '
     + 'peer grades, and asks to review {min_graded} peers.',
@@ -70,7 +72,8 @@ WaitingStepContent.propTypes = {
 
 WaitingStepContent.defaultProps = {
   refreshData: () => ({}),
-  findUsername: undefined
+  findUsername: undefined,
+  selectableLearners: undefined,
 };
 
 export default WaitingStepContent;
