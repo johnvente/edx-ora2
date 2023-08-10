@@ -42,14 +42,14 @@ const WaitingStepList = ({
     if (selectableLearnersEnabled && selectedFlatRowsLength) {
       const [rowSelected] = selectedFlatRows;
       const {
-        values: { username: student_username },
+        values: { username: studentUsername },
       } = rowSelected;
 
       const invalidSelection = selectedFlatRowsLength !== 1;
 
       const handleFindLearnerClick = () => {
         if (findStudent) {
-          findStudent(student_username);
+          findStudent(studentUsername);
         }
       };
 
