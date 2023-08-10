@@ -5,7 +5,7 @@ import sinon from 'sinon';
 import WaitingStepList from 'lms/components/WaitingStepList';
 
 describe('OpenAssessment.WaitingStepList', () => {
-  window.gettext = sinon.fake((text) => text);;
+  window.gettext = sinon.fake((text) => text);
 
   describe('With selectableLearnersEnabled as a prop', () => {
 
