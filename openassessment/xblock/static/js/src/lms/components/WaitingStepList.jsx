@@ -22,7 +22,7 @@ const myObject = {
 };
 
 const WaitingStepList = ({
-  studentList, refreshData, findUsername, selectableLearners,
+  studentList, refreshData, findStudent, selectableLearnersEnabled,
 }) => {
   const finalList = studentList.length ? studentList : [myObject];
   const studentListWithTimeAgo = finalList.map((item) => ({
@@ -34,22 +34,22 @@ const WaitingStepList = ({
     <Button onClick={() => refreshData()}>{gettext('Refresh')}</Button>
   );
 
-  const FindLearnerAction = (props) => {
+  const FindStudentAction = (props) => {
     const { tableInstance: { selectedFlatRows = [] } } = props || { tableInstance: {} };
 
     const selectedFlatRowsLength = selectedFlatRows.length;
 
-    if (selectableLearners && selectedFlatRowsLength) {
-      const [row] = selectedFlatRows;
+    if (selectableLearnersEnabled && selectedFlatRowsLength) {
+      const [rowSelected] = selectedFlatRows;
       const {
-        values: { username },
-      } = row;
+        values: { username: student_username },
+      } = rowSelected;
 
       const invalidSelection = selectedFlatRowsLength !== 1;
 
       const handleFindLearnerClick = () => {
-        if (findUsername) {
-          findUsername(username);
+        if (findStudent) {
+          findStudent(student_username);
         }
       };
 
@@ -80,7 +80,7 @@ const WaitingStepList = ({
     <DataTable
       itemCount={studentListWithTimeAgo.length}
       data={studentListWithTimeAgo}
-      isSelectable={selectableLearners}
+      isSelectable={selectableLearnersEnabled}
       columns={[
         {
           Header: gettext('Username'),
@@ -110,7 +110,7 @@ const WaitingStepList = ({
       ]}
       tableActions={[
         <RefreshAction />,
-        <FindLearnerAction />,
+        <FindStudentAction />,
       ]}
     >
       <DataTable.TableControlBar />
@@ -123,14 +123,14 @@ const WaitingStepList = ({
 WaitingStepList.propTypes = {
   studentList: PropTypes.arrayOf(PropTypes.object).isRequired,
   refreshData: PropTypes.func,
-  findUsername: PropTypes.func,
-  selectableLearners: PropTypes.bool,
+  findStudent: PropTypes.func,
+  selectableLearnersEnabled: PropTypes.bool,
 };
 
 WaitingStepList.defaultProps = {
   refreshData: () => ({}),
-  findUsername: undefined,
-  selectableLearners: false,
+  findStudent: () => ({}),
+  selectableLearnersEnabled: false,
 };
 
 export default WaitingStepList;

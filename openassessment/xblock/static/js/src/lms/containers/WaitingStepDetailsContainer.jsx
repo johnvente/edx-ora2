@@ -7,7 +7,7 @@ import {
 import { fetchWaitingStepDetails } from '../api/waiting_step_details';
 import WaitingStepContent from '../components/WaitingStepContent';
 
-const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLearners }) => {
+const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLearnersEnabled }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [waitingStepDetails, setWaitingStepDetails] = useState({
@@ -21,7 +21,6 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLe
 
     // Make request using API
     try {
-      // Make request using API
       const { success, waitingStepData } = await fetchWaitingStepDetails(waitingStepDataUrl);
 
       // Check response and save contents on state
@@ -37,7 +36,7 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLe
     }
   };
 
-  const getUserNamSelected = (username) => {
+  const getUsernameSelected = (username) => {
     const button = document.querySelector('.button-staff-tools');
     if (button) {
       if (
@@ -89,8 +88,8 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLe
             <WaitingStepContent
               waitingStepDetails={waitingStepDetails}
               refreshData={updateData}
-              findUsername={getUserNamSelected}
-              selectableLearners={selectableLearners}
+              findStudent={getUsernameSelected}
+              selectableLearnersEnabled={selectableLearnersEnabled}
             />
           )}
 
@@ -114,12 +113,12 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLe
 WaitingStepDetailsContainer.propTypes = {
   waitingStepDataUrl: PropTypes.string.isRequired,
   onMount: PropTypes.func,
-  selectableLearners: PropTypes.bool,
+  selectableLearnersEnabled: PropTypes.bool,
 };
 
 WaitingStepDetailsContainer.defaultProps = {
   onMount: () => ({}),
-  selectableLearners: false,
+  selectableLearnersEnabled: false,
 };
 
 export default WaitingStepDetailsContainer;
