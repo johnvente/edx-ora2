@@ -4,7 +4,7 @@ import { Alert } from '@edx/paragon';
 import WaitingStepList from './WaitingStepList';
 
 const WaitingStepContent = ({
-  waitingStepDetails, refreshData, findStudent, selectableLearnersEnabled,
+  waitingStepDetails, refreshData, findLearner, selectableLearnersEnabled,
 }) => {
   const oraDescriptionText = gettext(
     'The "{name}" problem is configured to require a minimum of {min_grades} '
@@ -49,7 +49,7 @@ const WaitingStepContent = ({
       <WaitingStepList
         studentList={waitingStepDetails.student_data}
         refreshData={refreshData}
-        findStudent={findStudent}
+        findLearner={findLearner}
         selectableLearnersEnabled={selectableLearnersEnabled}
       />
     </div>
@@ -66,13 +66,13 @@ WaitingStepContent.propTypes = {
     student_data: PropTypes.arrayOf(PropTypes.object),
   }).isRequired,
   refreshData: PropTypes.func,
-  findStudent: PropTypes.func,
+  findLearner: PropTypes.func,
   selectableLearnersEnabled: PropTypes.bool,
 };
 
 WaitingStepContent.defaultProps = {
   refreshData: () => ({}),
-  findStudent: () => ({}),
+  findLearner: () => ({}),
   selectableLearnersEnabled: false,
 };
 

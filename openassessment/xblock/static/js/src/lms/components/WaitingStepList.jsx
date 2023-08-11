@@ -6,26 +6,10 @@ import { Search } from '@edx/paragon/icons';
 
 const getReadableTime = (timestamp) => moment(timestamp).fromNow(true);
 
-const currentDate = new Date();
-
-// Calculate the date seven days ago
-const sevenDaysAgo = new Date(currentDate);
-sevenDaysAgo.setDate(currentDate.getDate() - 7);
-
-const myObject = {
-  username: 'sofie_20',
-  graded: 1,
-  graded_by: 1,
-  created_at: sevenDaysAgo,
-  staff_grade_status: 'waiting',
-  workflow_status: '',
-};
-
 const WaitingStepList = ({
-  studentList, refreshData, findStudent, selectableLearnersEnabled,
+  studentList, refreshData, findLearner, selectableLearnersEnabled,
 }) => {
-  const finalList = studentList.length ? studentList : [myObject];
-  const studentListWithTimeAgo = finalList.map((item) => ({
+  const studentListWithTimeAgo = studentList.map((item) => ({
     ...item,
     created_at: getReadableTime(item.created_at),
   }));
@@ -34,7 +18,7 @@ const WaitingStepList = ({
     <Button onClick={() => refreshData()}>{gettext('Refresh')}</Button>
   );
 
-  const FindStudentAction = (props) => {
+  const FindLearnerAction = (props) => {
     const { tableInstance: { selectedFlatRows = [] } } = props || { tableInstance: {} };
 
     const selectedFlatRowsLength = selectedFlatRows.length;
@@ -42,14 +26,14 @@ const WaitingStepList = ({
     if (selectableLearnersEnabled && selectedFlatRowsLength) {
       const [rowSelected] = selectedFlatRows;
       const {
-        values: { username: studentUsername },
+        values: { username: learnerUsername },
       } = rowSelected;
 
       const invalidSelection = selectedFlatRowsLength !== 1;
 
       const handleFindLearnerClick = () => {
-        if (findStudent) {
-          findStudent(studentUsername);
+        if (findLearner) {
+          findLearner(learnerUsername);
         }
       };
 
@@ -110,7 +94,7 @@ const WaitingStepList = ({
       ]}
       tableActions={[
         <RefreshAction />,
-        <FindStudentAction />,
+        <FindLearnerAction />,
       ]}
     >
       <DataTable.TableControlBar />
@@ -123,13 +107,13 @@ const WaitingStepList = ({
 WaitingStepList.propTypes = {
   studentList: PropTypes.arrayOf(PropTypes.object).isRequired,
   refreshData: PropTypes.func,
-  findStudent: PropTypes.func,
+  findLearner: PropTypes.func,
   selectableLearnersEnabled: PropTypes.bool,
 };
 
 WaitingStepList.defaultProps = {
   refreshData: () => ({}),
-  findStudent: () => ({}),
+  findLearner: () => ({}),
   selectableLearnersEnabled: false,
 };
 

@@ -12,7 +12,7 @@ describe('OpenAssessment.WaitingStepList', () => {
     it('should allow row selection when is true', async () => {
       const studentList = [
         {
-          username: 'jhon_20',
+          username: 'myusername',
           graded: false,
           graded_by: '2',
           created_at: Date.now(),
@@ -41,13 +41,13 @@ describe('OpenAssessment.WaitingStepList', () => {
       expect(firstRowCheckbox).not.toBeNull();
     });
     
-    it('should call findStudent function when has 1 row selected', async () => {
+    it('should call findLearner function when has 1 row selected', async () => {
       // Create a jest spy for the findUsername function
-      const findStudentSpy = sinon.spy();
+      const findLearnerSpy = sinon.spy();
 
       const studentList = [
         {
-          username: 'jhon_20',
+          username: 'myusername',
           graded: false,
           graded_by: '2',
           created_at: Date.now(),
@@ -61,7 +61,7 @@ describe('OpenAssessment.WaitingStepList', () => {
           <WaitingStepList
             selectableLearnersEnabled
             studentList={studentList}
-            findStudent={findStudentSpy}
+            findLearner={findLearnerSpy}
           />
         </IntlProvider>
       );
@@ -81,7 +81,7 @@ describe('OpenAssessment.WaitingStepList', () => {
 
       fireEvent.click(findLearnerButton);
 
-      sinon.assert.calledWith(findStudentSpy, 'jhon_20');
+      sinon.assert.calledWith(findLearnerSpy, 'myusername');
     });
 
     it('should show two checkboxes but not call findStudent function when has 2 rows selected', async () => {
@@ -90,7 +90,7 @@ describe('OpenAssessment.WaitingStepList', () => {
 
       const studentList = [
         {
-          username: 'jhon_20',
+          username: 'myusername',
           graded: false,
           graded_by: '2',
           created_at: Date.now(),
@@ -146,7 +146,7 @@ describe('OpenAssessment.WaitingStepList', () => {
 
       const studentList = [
         {
-          username: 'jhon_20',
+          username: 'myusername',
           graded: false,
           graded_by: '2',
           created_at: Date.now(),

@@ -88,7 +88,7 @@ const WaitingStepDetailsContainer = ({ waitingStepDataUrl, onMount, selectableLe
             <WaitingStepContent
               waitingStepDetails={waitingStepDetails}
               refreshData={updateData}
-              findStudent={getUsernameSelected}
+              findLearner={getUsernameSelected}
               selectableLearnersEnabled={selectableLearnersEnabled}
             />
           )}
