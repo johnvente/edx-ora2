@@ -27,7 +27,7 @@ const WaitingStepDetailsContainer = ({
     // Make request using API
     try {
       const { success, waitingStepData } = await fetchWaitingStepDetails(
-        waitingStepDataUrl
+        waitingStepDataUrl,
       );
 
       // Check response and save contents on state
@@ -47,17 +47,17 @@ const WaitingStepDetailsContainer = ({
     const button = document.querySelector('.button-staff-tools');
     if (button) {
       if (
-        !button.classList.contains('is--active') &&
-        button.getAttribute('aria-expanded') === 'false'
+        !button.classList.contains('is--active')
+        && button.getAttribute('aria-expanded') === 'false'
       ) {
         button.click();
       }
 
       const inputUsername = document.querySelector(
-        '.openassessment__student_username.value'
+        '.openassessment__student_username.value',
       );
       const submitButtonUsername = document.querySelector(
-        '.action--submit-username'
+        '.action--submit-username',
       );
 
       if (inputUsername && submitButtonUsername) {

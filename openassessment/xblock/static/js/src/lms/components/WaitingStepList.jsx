@@ -89,10 +89,14 @@ const WaitingStepList = ({
 WaitingStepList.propTypes = {
   studentList: PropTypes.arrayOf(PropTypes.object).isRequired,
   refreshData: PropTypes.func,
+  findLearner: PropTypes.func,
+  selectableLearnersEnabled: PropTypes.bool,
 };
 
 WaitingStepList.defaultProps = {
   refreshData: () => ({}),
+  findLearner: () => ({}),
+  selectableLearnersEnabled: false,
 };
 
 export default WaitingStepList;
