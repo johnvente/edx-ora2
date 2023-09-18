@@ -648,6 +648,7 @@ class OpenAssessmentBlock(MessageMixin,
         context_dict = {
             "title": self.title,
             "peer_assessment_required": peer_assessment_required,
+            "selectable_learners_enabled": ENABLE_SELECTABLE_LEARNER_WAITING_REVIEW.is_enabled(),
         }
 
         if peer_assessment_required:
