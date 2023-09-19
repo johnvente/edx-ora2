@@ -63,6 +63,11 @@ ENABLE_SELECTABLE_LEARNER_WAITING_REVIEW = SettingDictToggle(
     "FEATURES", "ENABLE_SELECTABLE_LEARNER_WAITING_REVIEW", default=False, module_name=__name__
 )
 
+
+ENABLE_SELECTABLE_LEARNER_WAITING_REVIEW = SettingDictToggle(
+    "FEATURES", "ENABLE_SELECTABLE_LEARNER_WAITING_REVIEW", default=False, module_name=__name__
+)
+
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
