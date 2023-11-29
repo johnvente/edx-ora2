@@ -3,10 +3,15 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import sinon from 'sinon'; 
 import WaitingStepList from 'lms/components/WaitingStepList';
-import { exact } from 'prop-types';
 
 describe('OpenAssessment.WaitingStepList', () => {
   window.gettext = sinon.fake((text) => text);
+
+  const IntlProviderWrapper = ({ children }) => (
+    <IntlProvider locale="en" messages={{}}>
+      {children}
+    </IntlProvider>
+  );
 
   describe('With selectableLearnersEnabled as a prop', () => {
     const WaitingStepListWrapper = ({ children }) => <div data-testid="learners-data-table">{children}</div>
@@ -24,14 +29,14 @@ describe('OpenAssessment.WaitingStepList', () => {
       ];
 
       render(
-        <IntlProvider locale="en" messages={{}}>
+        <IntlProviderWrapper>
           <WaitingStepListWrapper>
             <WaitingStepList
               selectableLearnersEnabled
               studentList={studentList}
             />
           </WaitingStepListWrapper>
-        </IntlProvider>
+        </IntlProviderWrapper>
       );
 
 
@@ -58,14 +63,14 @@ describe('OpenAssessment.WaitingStepList', () => {
       ];
 
       render(
-        <IntlProvider locale="en" messages={{}}>
+        <IntlProviderWrapper>
           <WaitingStepListWrapper>
             <WaitingStepList
               selectableLearnersEnabled
               studentList={studentList}
             />
           </WaitingStepListWrapper>
-        </IntlProvider>
+        </IntlProviderWrapper>
       );
 
       await waitFor(() =>  screen.getByTestId('learners-data-table'));
@@ -79,9 +84,6 @@ describe('OpenAssessment.WaitingStepList', () => {
 
       expect(reviewLearnerButtonAction).not.toBeNull();;
 
-      //fireEvent.click(findLearnerButton);
-
-      // sinon.assert.calledWith(findLearnerSpy, 'myusername');
     });
 
     it('should call findLearner function when review action is clicked', async () => {
@@ -100,7 +102,7 @@ describe('OpenAssessment.WaitingStepList', () => {
       ];
 
       render(
-        <IntlProvider locale="en" messages={{}}>
+        <IntlProviderWrapper>
           <WaitingStepListWrapper>
             <WaitingStepList
               selectableLearnersEnabled
@@ -108,7 +110,7 @@ describe('OpenAssessment.WaitingStepList', () => {
               findLearner={findLearnerSpy}
             />
           </WaitingStepListWrapper>
-        </IntlProvider>
+        </IntlProviderWrapper>
       );
 
       await waitFor(() =>  screen.getByTestId('learners-data-table'));
@@ -149,7 +151,7 @@ describe('OpenAssessment.WaitingStepList', () => {
       ];
 
       render(
-        <IntlProvider locale="en" messages={{}}>
+        <IntlProviderWrapper>
           <WaitingStepListWrapper>
             <WaitingStepList
               selectableLearnersEnabled
@@ -157,7 +159,7 @@ describe('OpenAssessment.WaitingStepList', () => {
               findLearner={findLearnerSpy}
             />
           </WaitingStepListWrapper>
-        </IntlProvider>
+        </IntlProviderWrapper>
       );
 
       await waitFor(() =>  screen.getByTestId('learners-data-table'));
@@ -176,11 +178,7 @@ describe('OpenAssessment.WaitingStepList', () => {
       
       expect(reviewButtonInFirstRow).not.toBeNull();
       expect(reviewButtonInSecondRow).toBeNull();
-      /*const reviewLearnerButtonAction = screen.getByTestId('review-learner-button');
 
-      fireEvent.click(reviewLearnerButtonAction);
-
-      sinon.assert.calledWith(findLearnerSpy, 'myusername'); */
     });
 
     it('should disable other rows when a row is selected', async () => {
@@ -206,7 +204,7 @@ describe('OpenAssessment.WaitingStepList', () => {
       ];
 
       render(
-        <IntlProvider locale="en" messages={{}}>
+        <IntlProviderWrapper>
           <WaitingStepListWrapper>
             <WaitingStepList
               selectableLearnersEnabled
@@ -214,18 +212,16 @@ describe('OpenAssessment.WaitingStepList', () => {
               findLearner={findLearnerSpy}
             />
           </WaitingStepListWrapper>
-        </IntlProvider>
+        </IntlProviderWrapper>
       );
 
       await waitFor(() =>  screen.getByTestId('learners-data-table'));
-      const dataTable = screen.getByTestId('learners-data-table');
       const rowCheckboxes = screen.getAllByTestId('datatable-select-column-checkbox-cell');
       const [firstRowCheckbox, secondRowCheckbox] = rowCheckboxes;
 
       fireEvent.click(firstRowCheckbox);
 
       expect(firstRowCheckbox.checked).toBe(true);
-      // second row should be disabled
       expect(secondRowCheckbox.hasAttribute("disabled")).toBe(true)
     });
 
