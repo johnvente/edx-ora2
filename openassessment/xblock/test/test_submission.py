@@ -4,18 +4,18 @@ Test submission to the OpenAssessment XBlock.
 
 import datetime as dt
 import json
-
 from unittest.mock import ANY, Mock, call, patch
 from testfixtures import LogCapture
-import ddt
 import pytz
 
-from django.core.exceptions import ObjectDoesNotExist
-from django.test.utils import override_settings
-
 import boto3
+import ddt
 from moto import mock_s3
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
+from django.test.utils import override_settings
+from freezegun import freeze_time
+
 from xblock.exceptions import NoSuchServiceError
 from submissions import api as sub_api
 from submissions import team_api as team_sub_api
@@ -26,56 +26,61 @@ from openassessment.workflow import (
     api as workflow_api,
     team_api as team_workflow_api
 )
-from openassessment.xblock.data_conversion import create_submission_dict, prepare_submission_for_serialization
+from openassessment.xblock.apis.submissions import submissions_actions
+from openassessment.xblock.utils.data_conversion import create_submission_dict, prepare_submission_for_serialization
 from openassessment.xblock.openassessmentblock import OpenAssessmentBlock
-from openassessment.xblock.submission_mixin import EmptySubmissionError
+from openassessment.xblock.ui_mixins.legacy.views.submission import get_team_submission_context
 from openassessment.xblock.workflow_mixin import WorkflowMixin
 from openassessment.xblock.test.test_team import MockTeamsService, MOCK_TEAM_ID
 
-from .base import XBlockHandlerTestCase, scenario
+from .base import SubmissionTestMixin, XBlockHandlerTestCase, scenario
 from .test_staff_area import NullUserService, UserStateService
 
 COURSE_ID = 'test_course'
 
 
+def setup_mock_team(xblock):
+    """ Enable teams and configure a mock team to be returned from the teams service
+
+        Returns:
+            the mock team for use in test validation
+    """
+
+    xblock.xmodule_runtime = Mock(
+        user_is_staff=False,
+        user_is_beta_tester=False,
+        course_id=COURSE_ID,
+        anonymous_student_id='r5'
+    )
+
+    mock_team = {
+        'team_id': MOCK_TEAM_ID,
+        'team_name': 'Red Squadron',
+        'team_usernames': ['Red Leader', 'Red Two', 'Red Five'],
+        'team_url': 'rebel_alliance.org'
+    }
+
+    xblock.teams_enabled = True
+    xblock.team_submissions_enabled = True
+
+    xblock.has_team = Mock(return_value=True)
+    xblock.get_team_info = Mock(return_value=mock_team)
+    xblock.get_anonymous_user_ids_for_team = Mock(return_value=['rl', 'r5', 'r2'])
+    password = 'password'
+    user = get_user_model().objects.create_user(username='Red Five', password=password)
+    xblock.get_real_user = Mock(return_value=user)
+
+    return mock_team
+
+
 class SubmissionXBlockHandlerTestCase(XBlockHandlerTestCase):
     @staticmethod
     def setup_mock_team(xblock):
-        """ Enable teams and configure a mock team to be returned from the teams service
-
-            Returns:
-                the mock team for use in test validation
-        """
-
-        xblock.xmodule_runtime = Mock(
-            user_is_staff=False,
-            user_is_beta_tester=False,
-            course_id=COURSE_ID,
-            anonymous_student_id='r5'
-        )
-
-        mock_team = {
-            'team_id': MOCK_TEAM_ID,
-            'team_name': 'Red Squadron',
-            'team_usernames': ['Red Leader', 'Red Two', 'Red Five'],
-            'team_url': 'rebel_alliance.org'
-        }
-
-        xblock.teams_enabled = True
-        xblock.team_submissions_enabled = True
-
-        xblock.has_team = Mock(return_value=True)
-        xblock.get_team_info = Mock(return_value=mock_team)
-        xblock.get_anonymous_user_ids_for_team = Mock(return_value=['rl', 'r5', 'r2'])
-        password = 'password'
-        user = get_user_model().objects.create_user(username='Red Five', password=password)
-        xblock.get_real_user = Mock(return_value=user)
-
-        return mock_team
+        return setup_mock_team(xblock)
 
 
 @ddt.ddt
-class SubmissionTest(SubmissionXBlockHandlerTestCase):
+class SubmissionTest(SubmissionXBlockHandlerTestCase, SubmissionTestMixin):
     """ Test Submissions Api for Open Assessments. """
     SUBMISSION = json.dumps({
         "submission": ["This is my answer to the first prompt!", "This is my answer to the second prompt!"]
@@ -200,22 +205,23 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
         FILE_UPLOAD_STORAGE_BUCKET_NAME="mybucket"
     )
     @scenario('data/single_file_upload_scenario.xml')
-    def test_upload_url_single_file(self, xblock):
+    @patch('openassessment.xblock.apis.submissions.file_api.file_upload_api.get_download_url')
+    def test_upload_url_single_file(self, xblock, mock_download_url):
         """ Test generate correct upload URL """
         xblock.xmodule_runtime = Mock(
             course_id='test_course',
             anonymous_student_id='test_student',
         )
-        # _get_download_url is run by upload_url to check if any uploads exist.
-        # Set it to return some path so simulate a file already uploaded.
-        xblock._get_download_url = lambda x: "https://example.com/url"  # pylint: disable=protected-access
+
+        # Simulate a file already uploaded
+        mock_download_url.return_value = "https://example.com/url"
         resp = self.request(xblock, 'upload_url', json.dumps({"contentType": "image/jpeg",
                                                               "filename": "test.jpg"}), response_format='json')
         self.assertFalse(resp['success'])
         self.assertIn('Only a single file upload is allowed', resp['msg'])
 
         # Now test that we can upload a file if no existing upload.
-        xblock._get_download_url = lambda x: None  # pylint: disable=protected-access
+        mock_download_url.return_value = None
         resp = self.request(xblock, 'upload_url', json.dumps({"contentType": "image/jpeg",
                                                               "filename": "test.jpg"}), response_format='json')
         self.assertTrue(resp['success'])
@@ -224,6 +230,7 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
             resp['url']
         )
 
+    @freeze_time('2023-10-17 12:00:01')
     @mock_s3
     @override_settings(
         AWS_ACCESS_KEY_ID='foobar',
@@ -295,7 +302,7 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
         )
 
         # Mock away any calls to the teams service
-        xblock._can_delete_file = Mock(return_value=True)  # pylint: disable=protected-access
+        xblock.submission_data.files.can_delete_file = Mock(return_value=True)
         xblock.has_team = Mock(return_value=False)
 
         file_metadata = [
@@ -540,7 +547,7 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
                 'files_sizes': []
             },
         }
-        with patch('openassessment.fileupload.api.get_download_url') as mock_download_url:
+        with patch('openassessment.data.get_download_url') as mock_download_url:
             # Pretend there are two uploaded files for this XBlock.
             mock_download_url.side_effect = [
                 'download-url-1',
@@ -581,7 +588,7 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
                 'file_key': 'key-1',
             },
         }
-        with patch('openassessment.fileupload.api.get_download_url') as mock_download_url:
+        with patch('openassessment.data.get_download_url') as mock_download_url:
             # Pretend there are two uploaded files for this XBlock.
             mock_download_url.side_effect = [
                 'download-url-1',
@@ -612,12 +619,11 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
         # If there's no teams config, just return without adding anyting to the context, but log an error
         with LogCapture() as logger:
             xblock.get_team_info = Mock(side_effect=NoSuchServiceError)
-            context = {}
-            xblock.get_team_submission_context(context)
+            context = get_team_submission_context(xblock.config_data)
             self.assertEqual(context, {})
             logger.check_present(
                 (
-                    'openassessment.xblock.submission_mixin',
+                    'openassessment.xblock.ui_mixins.legacy.views.submission',
                     'ERROR',
                     '{}: Teams service is unavailable'.format(
                         xblock.location,
@@ -628,12 +634,11 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
         # If we can't resolve the anonymous_id to a real user, again just don't do anything but log
         with LogCapture() as logger:
             xblock.get_team_info = Mock(side_effect=ObjectDoesNotExist)
-            context = {}
-            xblock.get_team_submission_context(context)
+            context = get_team_submission_context(xblock.config_data)
             self.assertEqual(context, {})
             logger.check_present(
                 (
-                    'openassessment.xblock.submission_mixin',
+                    'openassessment.xblock.ui_mixins.legacy.views.submission',
                     'ERROR',
                     '{}: User associated with anonymous_user_id {} can not be found.'.format(
                         xblock.location,
@@ -651,19 +656,16 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
         (['', '', ''], ['file_1_key'], False),
     )
     @ddt.unpack
-    def test_check_for_empty_submission_and_raise_error(self, xblock, parts, file_keys, expect_raises):
+    def test_submission_is_empty(self, xblock, parts, file_keys, expect_is_empty):
         """
-        Unit tests for check_for_empty_submission_and_raise_error
+        Unit tests for submission_is_empty
         """
         submission_dict = {'parts': [{'text': part} for part in parts]}
         if file_keys is not None:
             submission_dict['file_keys'] = file_keys
 
-        if expect_raises:
-            with self.assertRaises(EmptySubmissionError):
-                xblock.check_for_empty_submission_and_raise_error(submission_dict)
-        else:
-            xblock.check_for_empty_submission_and_raise_error(submission_dict)
+        is_empty = xblock.submission_data.submission_is_empty(submission_dict)
+        self.assertEqual(expect_is_empty, is_empty)
 
     @scenario('data/basic_scenario.xml', user_id='Red Five')
     @ddt.data(False, True)
@@ -686,7 +688,7 @@ class SubmissionTest(SubmissionXBlockHandlerTestCase):
         self.assertIsNotNone(response[2])
 
 
-class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
+class SubmissionRenderTest(SubmissionXBlockHandlerTestCase, SubmissionTestMixin):
     """
     Test rendering of the submission step.
     To cover all states in a maintainable way, we mostly check the
@@ -699,7 +701,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
     @scenario('data/submission_unavailable.xml', user_id="Bob")
     def test_unavailable(self, xblock):
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_unavailable.html',
+            xblock, 'legacy/response/oa_response_unavailable.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
@@ -725,12 +727,9 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         # even though the problem is unavailable.
         # In this case, we should continue showing that the student completed
         # the submission.
-        submission = xblock.create_submission(
-            xblock.get_student_item_dict(),
-            ('A man must have a code', 'A man must have an umbrella too.')
-        )
+        submission = self.create_test_submission(xblock)
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_submitted.html',
+            xblock, 'legacy/response/oa_response_submitted.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
@@ -754,11 +753,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
     @scenario('data/submission_open.xml', user_id="Bob")
     def test_open_unanswered(self, xblock):
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response.html',
+            xblock, 'legacy/response/oa_response.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': True,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -772,7 +772,6 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 'save_status': 'Response not started.',
                 'show_rubric_during_response': False,
                 'submission_due': dt.datetime(2999, 5, 6).replace(tzinfo=pytz.utc),
-                'submit_enabled': False,
                 'text_response': 'required',
                 'text_response_editor': 'text',
                 'user_timezone': None,
@@ -792,11 +791,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         xblock.user_state_upload_data_enabled = Mock(return_value=True)
         xblock.is_team_assignment = Mock(return_value=True)
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response.html',
+            xblock, 'legacy/response/oa_response.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': True,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -809,7 +809,6 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 }, xblock.prompts),
                 'save_status': 'Response not started.',
                 'show_rubric_during_response': False,
-                'submit_enabled': False,
                 'submission_due': dt.datetime(2999, 5, 6).replace(tzinfo=pytz.utc),
                 'team_id': mock_team['team_id'],
                 'team_members_with_external_submissions': '',
@@ -823,14 +822,13 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
             }
         )
 
-    @patch('openassessment.xblock.submission_mixin.list_to_conversational_format')
     @patch('submissions.team_api.get_teammates_with_submissions_from_other_teams')
     @scenario('data/submission_open.xml', user_id="Red Five")
     def test_get_team_submission_context(
-            self,
-            xblock,
-            mock_external_team_submissions,
-            mock_formatter):
+        self,
+        xblock,
+        mock_external_team_submissions,
+    ):
         team_info = {
             'team_id': MOCK_TEAM_ID,
             'team_info_extra': 'more team info'
@@ -869,15 +867,14 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
             side_effect=lambda student_id: student_usernames[student_ids.index(student_id)]
         )
 
-        mock_formatter.side_effect = ','.join
         xblock.get_anonymous_user_ids_for_team = Mock(return_value=student_ids)
+        expected_names = f"{student_usernames[0]}, {student_usernames[1]}, and {student_usernames[2]}"
         expected_context = {
-            'team_members_with_external_submissions': mock_formatter(student_usernames),
-            'team_id': MOCK_TEAM_ID,
-            'team_info_extra': 'more team info'
+            "team_members_with_external_submissions": expected_names,
+            "team_id": MOCK_TEAM_ID,
+            "team_info_extra": "more team info",
         }
-        context = {}
-        xblock.get_team_submission_context(context)
+        context = get_team_submission_context(xblock.config_data)
         mock_external_team_submissions.assert_called_with(
             COURSE_ID,
             usage_id,
@@ -893,8 +890,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
             user_is_staff=False
         )
         xblock.get_team_info = Mock(return_value=team_info)
-        context = {}
-        xblock.get_team_submission_context(context)
+        context = get_team_submission_context(xblock.config_data)
         self.assertEqual(context, {})
 
     @scenario('data/submission_open.xml', user_id="Red Five")
@@ -910,14 +906,13 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
             user_is_staff=True
         )
         xblock.get_team_info = Mock(return_value=team_info)
-        context = {}
-        xblock.get_team_submission_context(context)
+        context = get_team_submission_context(xblock.config_data)
         self.assertEqual(context, team_info)
 
     @scenario('data/submission_no_deadline.xml', user_id="Bob")
     def test_open_no_deadline(self, xblock):
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response.html',
+            xblock, 'legacy/response/oa_response.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
@@ -934,7 +929,6 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 }, xblock.prompts),
                 'save_status': 'Response not started.',
                 'show_rubric_during_response': False,
-                'submit_enabled': False,
                 'text_response': 'required',
                 'text_response_editor': 'text',
                 'user_timezone': None,
@@ -958,11 +952,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         del xblock.location  # self.request() inserts dummy location
 
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response.html',
+            xblock, 'legacy/response/oa_response.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': True,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -976,7 +971,6 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 'save_status': 'Draft saved!',
                 'show_rubric_during_response': False,
                 'submission_due': dt.datetime(2999, 5, 6).replace(tzinfo=pytz.utc),
-                'submit_enabled': True,
                 'text_response': 'required',
                 'text_response_editor': 'text',
                 'user_language': None,
@@ -1119,7 +1113,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         del xblock.location  # self.request() inserts dummy location
 
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response.html',
+            xblock, 'legacy/response/oa_response.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
@@ -1152,7 +1146,6 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 }, xblock.prompts),
                 'save_status': 'Draft saved!',
                 'show_rubric_during_response': False,
-                'submit_enabled': True,
                 'team_file_urls': [],
                 'text_response': None,
                 'text_response_editor': 'text',
@@ -1271,11 +1264,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         xblock.has_saved = True
 
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response.html',
+            xblock, 'legacy/response/oa_response.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': True,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -1289,7 +1283,6 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 'save_status': 'Draft saved!',
                 'show_rubric_during_response': False,
                 'submission_due': dt.datetime(2999, 5, 6).replace(tzinfo=pytz.utc),
-                'submit_enabled': True,
                 'text_response': 'required',
                 'text_response_editor': 'text',
                 'user_language': None,
@@ -1304,9 +1297,13 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
             on page load to see if a submisison has been created by a team member.
         """
         SubmissionTest.setup_mock_team(xblock)
-
-        xblock.create_team_submission(
-            ('A man must have a code', 'A man must have an umbrella too.')
+        student_item_dict = xblock.get_student_item_dict()
+        submissions_actions.create_team_submission(
+            student_item_dict,
+            ('A man must have a code', 'A man must have an umbrella too.'),
+            xblock.config_data,
+            xblock.submission_data,
+            xblock.workflow_data,
         )
 
         ts = TeamSubmission.objects.all()
@@ -1317,16 +1314,14 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
 
     @scenario('data/submission_open.xml', user_id="Bob")
     def test_open_submitted(self, xblock):
-        submission = xblock.create_submission(
-            xblock.get_student_item_dict(),
-            ('A man must have a code', 'A man must have an umbrella too.')
-        )
+        submission = self.create_test_submission(xblock)
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_submitted.html',
+            xblock, 'legacy/response/oa_response_submitted.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': False,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -1346,13 +1341,9 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
 
     @scenario('data/submission_open.xml', user_id="Bob")
     def test_cancelled_submission(self, xblock):
-        student_item = xblock.get_student_item_dict()
         mock_staff = Mock(name='Bob')
         xblock.get_username = Mock(return_value=mock_staff)
-        submission = xblock.create_submission(
-            student_item,
-            ('A man must have a code', 'A man must have an umbrella too.')
-        )
+        submission = self.create_test_submission(xblock)
         workflow_api.cancel_workflow(
             submission_uuid=submission['uuid'], comments='Inappropriate language',
             cancelled_by_id='Bob',
@@ -1361,11 +1352,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         )
 
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_cancelled.html',
+            xblock, 'legacy/response/oa_response_cancelled.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': False,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -1399,8 +1391,14 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
 
         xblock.user_state_upload_data_enabled = Mock(return_value=True)
         xblock.is_team_assignment = Mock(return_value=True)
-        team_submission = xblock.create_team_submission(
-            ('a man must have a code', 'a man must also have a towel')
+
+        student_item_dict = xblock.get_student_item_dict()
+        team_submission = submissions_actions.create_team_submission(
+            student_item_dict,
+            ('a man must have a code', 'a man must also have a towel'),
+            xblock.config_data,
+            xblock.submission_data,
+            xblock.workflow_data,
         )
 
         workflow = xblock.get_workflow_info()
@@ -1418,11 +1416,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         )
 
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_cancelled.html',
+            xblock, 'legacy/response/oa_response_cancelled.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': False,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -1449,20 +1448,18 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
     @patch.object(OpenAssessmentBlock, 'get_user_submission')
     @scenario('data/submission_open.xml', user_id="Bob")
     def test_open_submitted_old_format(self, xblock, mock_get_user_submission):
-        xblock.create_submission(
-            xblock.get_student_item_dict(),
-            ('A man must have a code', 'A man must have an umbrella too.')
-        )
+        self.create_test_submission(xblock)
 
         mock_get_user_submission.return_value = {"answer": {"text": "An old format response."}}
         xblock.prompts = [{'description': 'One prompt.'}]
 
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_submitted.html',
+            xblock, 'legacy/response/oa_response_submitted.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': False,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -1485,11 +1482,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
     @scenario('data/submission_closed.xml', user_id="Bob")
     def test_closed_incomplete(self, xblock):
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_closed.html',
+            xblock, 'legacy/response/oa_response_closed.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': False,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -1506,16 +1504,14 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
 
     @scenario('data/submission_closed.xml', user_id="Bob")
     def test_closed_submitted(self, xblock):
-        submission = xblock.create_submission(
-            xblock.get_student_item_dict(),
-            ('A man must have a code', 'A man must have an umbrella too.')
-        )
+        submission = self.create_test_submission(xblock)
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_submitted.html',
+            xblock, 'legacy/response/oa_response_submitted.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': False,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -1536,10 +1532,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
     @scenario('data/submission_open.xml', user_id="Bob")
     def test_open_graded(self, xblock):
         # Create a submission
-        submission = xblock.create_submission(
-            xblock.get_student_item_dict(),
-            ('A man must have a code', 'A man must have an umbrella too.')
-        )
+        submission = self.create_test_submission(xblock)
 
         # Simulate the user receiving a grade
         xblock.get_workflow_info = Mock(return_value={
@@ -1548,11 +1541,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         })
 
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_graded.html',
+            xblock, 'legacy/response/oa_response_graded.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': False,
                 'file_upload_response': None,
                 'file_upload_type': None,
@@ -1571,10 +1565,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
     @scenario('data/submission_closed.xml', user_id="Bob")
     def test_closed_graded(self, xblock):
         # Create a submission
-        submission = xblock.create_submission(
-            xblock.get_student_item_dict(),
-            ('A man must have a code', 'A man must have an umbrella too.')
-        )
+        submission = self.create_test_submission(xblock)
 
         # Simulate the user receiving a grade
         xblock.get_workflow_info = Mock(return_value={
@@ -1583,11 +1574,12 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         })
 
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_graded.html',
+            xblock, 'legacy/response/oa_response_graded.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': False,
                 'has_real_user': False,
                 'file_upload_response': None,
@@ -1611,39 +1603,40 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         self.assertIn('2999-05-06T00:00:00+00:00', resp.decode('utf-8'))
 
         # Create a submission for the user
-        xblock.create_submission(
-            xblock.get_student_item_dict(),
-            ('Ⱥ mȺn mᵾsŧ ħȺvɇ Ⱥ ȼøđɇ.', '∀ ɯɐu ɯnsʇ ɥɐʌǝ ɐu nɯqɹǝllɐ ʇoo˙'),
-        )
+        self.create_test_submission(xblock)
 
         # Expect that the response step is "submitted"
         resp = self.request(xblock, 'render_submission', json.dumps({}))
         self.assertIn('your response has been submitted', resp.decode('utf-8').lower())
 
-    @patch('openassessment.fileupload.api.can_delete_file', autospec=True)
-    @patch('openassessment.fileupload.api.get_student_file_key', autospec=True)
+    @patch('openassessment.xblock.apis.submissions.file_api.file_upload_api', autospec=True)
     @scenario('data/submission_open.xml', user_id="Bob")
-    def test_can_delete_file(self, xblock, mock_get_student_file_key, mock_can_delete_file):
+    def test_can_delete_file(self, xblock, mock_file_api):
         xblock.get_team_info = Mock(return_value={'team_id': 'my-team-id'})
-        xblock.teams_enabled = True
+        xblock.is_team_assignment = Mock(return_value=True)
+
+        mock_can_delete_file = mock_file_api.can_delete_file
+        mock_get_student_file_key = mock_file_api.get_student_file_key
 
         self.assertEqual(
-            mock_can_delete_file.return_value,
-            xblock._can_delete_file(5),  # pylint: disable=protected-access
+            mock_file_api.can_delete_file.return_value,
+            xblock.submission_data.files.can_delete_file(5)
         )
         mock_get_student_file_key.assert_called_once_with(xblock.get_student_item_dict(), index=5)
         mock_can_delete_file.assert_called_once_with('Bob', True, mock_get_student_file_key.return_value, 'my-team-id')
 
-    @patch('openassessment.fileupload.api.can_delete_file', autospec=True)
-    @patch('openassessment.fileupload.api.get_student_file_key', autospec=True)
+    @patch('openassessment.xblock.apis.submissions.file_api.file_upload_api', autospec=True)
     @scenario('data/submission_open.xml', user_id="Bob")
-    def test_can_delete_file_no_team_info(self, xblock, mock_get_student_file_key, mock_can_delete_file):
+    def test_can_delete_file_no_team_info(self, xblock, mock_file_api):
         xblock.get_team_info = Mock(return_value={})
-        xblock.teams_enabled = True
+        xblock.is_team_assignment = Mock(return_value=True)
+
+        mock_can_delete_file = mock_file_api.can_delete_file
+        mock_get_student_file_key = mock_file_api.get_student_file_key
 
         self.assertEqual(
             mock_can_delete_file.return_value,
-            xblock._can_delete_file(5),  # pylint: disable=protected-access
+            xblock.submission_data.files.can_delete_file(5)
         )
         mock_get_student_file_key.assert_called_once_with(xblock.get_student_item_dict(), index=5)
         mock_can_delete_file.assert_called_once_with('Bob', True, mock_get_student_file_key.return_value, None)
@@ -1681,7 +1674,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         # Assert that the xblock will render Red Five's existing submission rather that
         # no submission (because TestTeam does not yet have a submission)
         path, context = xblock.submission_path_and_context()
-        self.assertEqual(path, 'openassessmentblock/response/oa_response_submitted.html')
+        self.assertEqual(path, 'legacy/response/oa_response_submitted.html')
         self.assertEqual(context['student_submission'], create_submission_dict(individual_submission, xblock.prompts))
 
     @scenario('data/team_submission.xml', user_id="Red Five")
@@ -1717,11 +1710,11 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
 
         # Assert that the xblock will render Red Five's existing submission rather that no submission
         path, context = xblock.submission_path_and_context()
-        self.assertEqual(path, 'openassessmentblock/response/oa_response_submitted.html')
+        self.assertEqual(path, 'legacy/response/oa_response_submitted.html')
         self.assertEqual(context['student_submission'], create_submission_dict(individual_submission, xblock.prompts))
 
     @scenario('data/team_submission.xml', user_id="Red Five")
-    def test_get_sumbission_context_no_team(self, xblock):
+    def test_get_submission_context_no_team(self, xblock):
         """
         A student who tries to view a team assignment w/out being on a team will see the "response unavialable" view
         """
@@ -1735,9 +1728,9 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         xblock.runtime._services['user_state'] = UserStateService()
         xblock.runtime._services['teams'] = MockTeamsService(True)
 
-        # Assert that the xblock renders an unavailablbe submission
+        # Assert that the xblock renders an unavailable submission
         path, _ = xblock.submission_path_and_context()
-        self.assertEqual(path, 'openassessmentblock/response/oa_response_unavailable.html')
+        self.assertEqual(path, 'legacy/response/oa_response_unavailable.html')
 
     @scenario('data/team_submission.xml', user_id="Red Five")
     def test_team_has_already_submitted(self, xblock):
@@ -1765,7 +1758,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
 
         # Assert that we return the 'team already submitted' path
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response_team_already_submitted.html',
+            xblock, 'legacy/response/oa_response_team_already_submitted.html',
             {
                 'saved_response': create_submission_dict({
                     'answer': prepare_submission_for_serialization(
@@ -1775,6 +1768,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 'allow_latex': False,
                 'allow_multiple_files': True,
                 'base_asset_url': None,
+                'date_config_type': 'manual',
                 'enable_delete_files': True,
                 'has_real_user': True,
                 'file_upload_response': None,
@@ -1783,7 +1777,6 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 'save_status': 'Response not started.',
                 'show_rubric_during_response': False,
                 'submission_due': dt.datetime(2999, 5, 6).replace(tzinfo=pytz.utc),
-                'submit_enabled': False,
                 'team_id': MOCK_TEAM_ID,
                 'team_name': 'Red Squadron',
                 'team_members_with_external_submissions': '',
@@ -1803,7 +1796,7 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         the context. This allows us to show what files types are allowed for any upload configuration.
         """
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/response/oa_response.html',
+            xblock, 'legacy/response/oa_response.html',
             {
                 'allow_latex': False,
                 'allow_multiple_files': True,
@@ -1821,7 +1814,6 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
                 }, xblock.prompts),
                 'save_status': 'Response not started.',
                 'show_rubric_during_response': False,
-                'submit_enabled': False,
                 'team_file_urls': [],
                 'text_response': 'required',
                 'text_response_editor': 'text',
@@ -1867,8 +1859,9 @@ class SubmissionRenderTest(SubmissionXBlockHandlerTestCase):
         expected_context['xblock_id'] = xblock.scope_ids.usage_id
         path, context = xblock.submission_path_and_context()
         self.maxDiff = None  # pylint: disable=invalid-name
+
         self.assertEqual(path, expected_path)
-        self.assertEqual(context, expected_context)
+        self.assertDictEqual(context, expected_context)
 
         # Verify that we render without error
         resp = self.request(xblock, 'render_submission', json.dumps({}))

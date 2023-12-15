@@ -15,14 +15,22 @@ from xblock.fields import List, Scope
 from django.template.loader import get_template
 from django.utils.translation import gettext_lazy
 
-from openassessment.xblock.data_conversion import (create_rubric_dict, make_django_template_key,
-                                                   update_assessments_format)
-from openassessment.xblock.defaults import DEFAULT_EDITOR_ASSESSMENTS_ORDER, DEFAULT_RUBRIC_FEEDBACK_TEXT
-from openassessment.xblock.editor_config import AVAILABLE_EDITORS
+from openassessment.xblock.utils.data_conversion import (
+    create_rubric_dict,
+    make_django_template_key,
+    update_assessments_format
+)
+from openassessment.xblock.utils.defaults import DEFAULT_EDITOR_ASSESSMENTS_ORDER, DEFAULT_RUBRIC_FEEDBACK_TEXT
+from openassessment.xblock.utils.editor_config import AVAILABLE_EDITORS
 from openassessment.xblock.load_static import LoadStatic
-from openassessment.xblock.resolve_dates import DateValidationError, InvalidDateFormat, parse_date_value, resolve_dates
-from openassessment.xblock.schema import EDITOR_UPDATE_SCHEMA
-from openassessment.xblock.validation import validator
+from openassessment.xblock.utils.resolve_dates import (
+    DateValidationError,
+    InvalidDateFormat,
+    parse_date_value,
+    resolve_dates,
+)
+from openassessment.xblock.utils.schema import EDITOR_UPDATE_SCHEMA
+from openassessment.xblock.utils.validation import validator
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -54,7 +62,9 @@ class StudioMixin:
         key: val.get('display_name', key) for key, val in AVAILABLE_EDITORS.items()
     }
 
-    STUDIO_EDITING_TEMPLATE = 'openassessmentblock/edit/oa_edit.html'
+    STUDIO_EDITING_TEMPLATE = 'legacy/edit/oa_edit.html'
+
+    ORA_SETTINGS_DOCUMENT_URL = 'https://edx.readthedocs.io/projects/edx-partner-course-staff/en/latest/exercises_tools/open_response_assessments/CreateORAAssignment.html#specify-a-name-and-dates'  # noqa: E501 pylint: disable=line-too-long
 
     BASE_EDITOR_ASSESSMENTS_ORDER = copy.deepcopy(DEFAULT_EDITOR_ASSESSMENTS_ORDER)
 
@@ -190,7 +200,7 @@ class StudioMixin:
             ],
             'teams_feature_enabled': self.team_submissions_enabled,
             'teams_enabled': self.teams_enabled,
-            'base_asset_url': self._get_base_url_path_for_course_assets(course_id),
+            'base_asset_url': self.get_base_url_path_for_course_assets(course_id),
             'is_released': self.is_released(),
             'teamsets': self.get_teamsets(course_id),
             'selected_teamset_id': self.selected_teamset_id,
@@ -200,7 +210,11 @@ class StudioMixin:
             'block_location': str(self.location),
             'force_on_flexible_peer_openassessments': course_settings.get(
                 'force_on_flexible_peer_openassessments', False
-            )
+            ),
+            'date_config_type': self.date_config_type,
+            'date_config_type_doc_url': self.ORA_SETTINGS_DOCUMENT_URL,
+            'subsection_end_date': self.due,
+            'course_end_date': None if not self.course else self.course.end,
         }
 
     @XBlock.json_handler
@@ -304,6 +318,7 @@ class StudioMixin:
         self.teams_enabled = bool(data.get('teams_enabled', False))
         self.selected_teamset_id = data.get('selected_teamset_id', '')
         self.show_rubric_during_response = data.get('show_rubric_during_response', False)
+        self.date_config_type = data['date_config_type']
 
         return {'success': True, 'msg': self._('Successfully updated OpenAssessment XBlock')}
 
@@ -430,7 +445,7 @@ class StudioMixin:
                 superset[superset_index] = subset[index]
         return superset
 
-    def _get_base_url_path_for_course_assets(self, course_key):
+    def get_base_url_path_for_course_assets(self, course_key):
         """
         Returns base url path for course assets
         """

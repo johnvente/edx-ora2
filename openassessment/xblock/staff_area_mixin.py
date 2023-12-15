@@ -14,10 +14,10 @@ from submissions.errors import SubmissionNotFoundError
 from openassessment.assessment.errors import PeerAssessmentInternalError
 from openassessment.fileupload.api import delete_shared_files_for_team, remove_file
 from openassessment.workflow.errors import AssessmentWorkflowError, AssessmentWorkflowInternalError
-from openassessment.xblock.data_conversion import create_submission_dict
-from openassessment.xblock.resolve_dates import DISTANT_FUTURE, DISTANT_PAST
+from openassessment.xblock.utils.data_conversion import create_submission_dict
+from openassessment.xblock.utils.resolve_dates import DISTANT_FUTURE, DISTANT_PAST
 
-from .user_data import get_user_preferences
+from .utils.user_data import get_user_preferences
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -103,7 +103,7 @@ class StaffAreaMixin:
         Gets the path and context for the staff section of the ORA XBlock.
         """
         context = {}
-        path = 'openassessmentblock/staff_area/oa_staff_area.html'
+        path = 'legacy/staff_area/oa_staff_area.html'
 
         student_item = self.get_student_item_dict()
 
@@ -294,6 +294,33 @@ class StaffAreaMixin:
 
         return Response(json_body=waiting_step_data)
 
+    @staticmethod
+    def get_user_submission(submission_uuid):
+        """
+        Return the most recent submission by user in workflow
+
+        Return the most recent submission.  If no submission is available,
+        return None. All submissions are preserved, but only the most recent
+        will be returned in this function, since the active workflow will only
+        be concerned with the most recent submission.
+
+        NOTE that this doesn't do any access checking, so is only appropriate
+
+        Args:
+            submission_uuid (str): The uuid for the submission to retrieve.
+
+        Returns:
+            (dict): A dictionary representation of a submission to render to
+                the front end.
+        """
+        # Import is placed here to avoid model import at project startup.
+        from submissions import api
+        try:
+            return api.get_submission(submission_uuid)
+        except api.SubmissionRequestError:
+            # This error is actually ok.
+            return None
+
     @XBlock.handler
     @require_course_staff("STUDENT_INFO")
     def render_student_info(self, data, suffix=''):  # pylint: disable=W0613
@@ -353,7 +380,7 @@ class StaffAreaMixin:
                         self.add_team_submission_context(
                             submission_context, individual_submission_uuid=submission['uuid'], transform_usernames=True
                         )
-                    path = 'openassessmentblock/staff_area/oa_staff_grade_learners_assessment.html'
+                    path = 'legacy/staff_area/oa_staff_grade_learners_assessment.html'
                     return self.render_assessment(path, submission_context)
                 return self.render_error(self._("Error loading the checked out learner response."))
             return self.render_error(self._("No other learner responses are available for grading at this time."))
@@ -375,7 +402,7 @@ class StaffAreaMixin:
                 student_item_dict.get('course_id'), student_item_dict.get('item_id')
             )
 
-            path = 'openassessmentblock/staff_area/oa_staff_grade_learners_count.html'
+            path = 'legacy/staff_area/oa_staff_grade_learners_count.html'
             return self.render_assessment(path, context)
 
         except PeerAssessmentInternalError:
@@ -487,7 +514,7 @@ class StaffAreaMixin:
                     # A student outside of the course will not exist and is valid
                     pass
 
-        path = 'openassessmentblock/staff_area/oa_student_info.html'
+        path = 'legacy/staff_area/oa_student_info.html'
         return path, context
 
     def add_submission_context(self, submission_uuid, context):
