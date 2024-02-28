@@ -5,13 +5,28 @@ import { Button, DataTable } from '@openedx/paragon';
 
 const getReadableTime = (timestamp) => moment(timestamp).fromNow(true);
 
+const currentDate = new Date();
+
+// Calculate the date seven days ago
+const sevenDaysAgo = new Date(currentDate);
+sevenDaysAgo.setDate(currentDate.getDate() - 7);
+
+const myObject = {
+  username: 'sofia_20',
+  graded: 1,
+  graded_by: 1,
+  created_at: sevenDaysAgo,
+  staff_grade_status: 'waiting',
+  workflow_status: '',
+};
+
 const WaitingStepList = ({
   studentList,
   refreshData,
   findLearner,
   selectableLearnersEnabled,
 }) => {
-  const studentListWithTimeAgo = studentList.map((item) => ({
+  const studentListWithTimeAgo = [myObject].map((item) => ({
     ...item,
     created_at: getReadableTime(item.created_at),
   }));
@@ -23,6 +38,8 @@ const WaitingStepList = ({
   const reviewLearnerAction = (learnerUsername) => {
     findLearner(learnerUsername);
   };
+
+  console.log('selectableLearnersEnabled: test ->', selectableLearnersEnabled);
 
   return (
     <DataTable
